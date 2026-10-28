@@ -1,0 +1,79 @@
+{
+  "name": "tg-netdisk",
+  "version": "0.1.5",
+  "private": true,
+  "description": "Personal Telegram media publishing desktop client",
+  "main": "desktop/main.cjs",
+  "author": "Tg Netdisk",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:ui": "vite --config vite.config.ts",
+    "typecheck": "vue-tsc --noEmit",
+    "build": "npm run typecheck && vite build --config vite.config.ts",
+    "test": "vitest run",
+    "test:desktop": "node scripts/smoke.mjs",
+    "test:media": "node scripts/media-matrix.mjs",
+    "test:exit": "node scripts/check-exit.mjs",
+    "test:modals": "node scripts/check-modals.mjs",
+    "test:reset": "node scripts/check-reset.mjs",
+    "test:tasks": "node scripts/check-task-history.mjs",
+    "test:upload-settings": "node scripts/check-upload-settings.mjs",
+    "start": "electron .",
+    "pack:backend": "powershell -ExecutionPolicy Bypass -File scripts/package-backend.ps1",
+    "pack": "npm run build && npm run pack:backend && electron-builder --win nsis",
+    "pack:dir": "npm run build && npm run pack:backend && electron-builder --win --dir"
+  },
+  "dependencies": {
+    "lucide-vue-next": "0.468.0",
+    "mediabunny": "1.24.0",
+    "pinia": "3.0.3",
+    "vue": "3.5.44",
+    "vuedraggable": "4.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.1.16",
+    "@types/node": "22.18.12",
+    "@vitejs/plugin-vue": "6.0.1",
+    "electron": "45.0.0",
+    "electron-builder": "26.18.0",
+    "playwright": "1.64.1",
+    "prettier": "3.6.2",
+    "tailwindcss": "4.1.16",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "5.0.5",
+    "vue-tsc": "3.1.1"
+  },
+  "build": {
+    "appId": "com.tgnetdisk.desktop",
+    "productName": "Tg Netdisk",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist/tg-netdisk-backend",
+        "to": "backend"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icon.ico",
+      "signAndEditExecutable": true,
+      "signExecutable": false
+    },
+    "nsis": {
+      "installerIcon": "desktop/icon.ico",
+      "uninstallerIcon": "desktop/icon.ico",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}
