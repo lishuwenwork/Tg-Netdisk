@@ -19,6 +19,8 @@ npm run web
 
 首次启动会询问已有媒体目录，自动生成访问密码和密钥；目录、端口保存到忽略提交的 `.local-web.json`，之后运行同一命令即可。已有的 Docker `.env` 不会被覆盖。前端未构建时自动构建；代码更新后可运行 `npm run web -- --build`。
 
+启动命令直接使用项目 `backend/.venv` 中的 Python，已激活虚拟环境时也可运行；日常启动不要求该环境安装 uv。
+
 也可以直接指定目录或端口：
 
 ```powershell

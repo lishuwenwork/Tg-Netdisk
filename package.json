@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:ui": "vite --config vite.config.ts",
-    "web": "python -X utf8 -m uv run --project backend python -X utf8 scripts/run-web.py",
+    "web": "node scripts/web.mjs",
     "typecheck": "vue-tsc --noEmit",
     "build": "npm run typecheck && vite build --config vite.config.ts",
     "test": "vitest run",
