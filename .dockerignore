@@ -1,6 +1,7 @@
 .git
 .runtime
 .env
+.local-web.json
 deploy/.secrets
 deploy/data
 node_modules

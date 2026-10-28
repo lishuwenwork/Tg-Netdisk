@@ -14,7 +14,7 @@ def main():
     config = Config()
     config.data_dir.mkdir(parents=True, exist_ok=True)
     if config.frontend_dir is None:
-        config.frontend_dir = Path(__file__).resolve().parents[4] / "dist"
+        config.frontend_dir = Path(__file__).resolve().parents[3] / "dist"
     lock = (config.data_dir / "instance.lock").open("a+b")
     lock.write(b"0")
     lock.flush()

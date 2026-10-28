@@ -2,6 +2,8 @@
 
 本分支新增 Linux Docker / Web 模式，**仅选择服务器文件**；原始 Windows 桌面代码保留在 `master`。初始化、SSH 访问、HTTPS、媒体挂载及备份见 [Web 部署说明](docs/web.md)。Windows 开发和运行方式保持可用。
 
+本机启动 Web：`npm run web`。首次选择媒体目录后自动保存配置，以后重复同一命令即可，无需手动设置环境变量。
+
 Windows 本地 Telegram 媒体发布客户端。需求原件已保存在根目录 [Tg-Netdisk.md](Tg-Netdisk.md)，版本 v1.5。实现使用 Electron + Vue 3 + TypeScript + Tailwind CSS + Mediabunny，以及 Python 3.12 + FastAPI + Telethon + SQLite。
 
 ## 启动

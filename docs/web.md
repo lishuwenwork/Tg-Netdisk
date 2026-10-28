@@ -10,6 +10,26 @@ Web 仅使用服务器媒体：在只读根目录中浏览、搜索、分页和�
 
 ## 初始化与启动
 
+在当前 Windows / Linux 开发机直接运行 Web 服务，可使用本地入口，无需手动设置环境变量：
+
+```powershell
+cd D:\Project\Tg-Netdisk
+npm run web
+```
+
+首次启动会询问已有媒体目录，自动生成访问密码和密钥；目录、端口保存到忽略提交的 `.local-web.json`，之后运行同一命令即可。已有的 Docker `.env` 不会被覆盖。前端未构建时自动构建；代码更新后可运行 `npm run web -- --build`。
+
+也可以直接指定目录或端口：
+
+```powershell
+npm run web -- --media-root "D:\Videos"
+npm run web -- --port 8081
+```
+
+默认访问 `http://localhost:8080`。密码保存在 `deploy/.secrets/web_password`；服务终端显示文件位置，按 Ctrl+C 停止。首次在新机器使用仍需安装 Node.js、Python 3.12 和 uv，并执行 `npm ci`、`python -m uv sync --project backend --group dev --locked`。
+
+下面是 Linux Docker 部署步骤：
+
 Linux 主机需要 Docker Engine + Compose 插件；初始化脚本只依赖 Python 3 标准库。
 
 ```bash
@@ -92,6 +112,6 @@ sh scripts/check-docker.sh
 
 本次在 WSL Ubuntu 22.04 / Linux amd64 实际构建，并验证非 root 运行、Cookie 登录、服务器素材注册及 Range、凭据加密、草稿持久化、正常 SIGTERM 停止及重启后旧 Web 会话失效。Chrome 实测服务器视频、截图、封面、相册、草稿与退出；Windows 桌面媒体及退出恢复回归通过。
 
-自动化结果：pytest 61 项通过、1 项 Windows 符号链接权限导致跳过；Vitest 9 项通过。类型检查、生产构建、Ruff、mypy、npm 生产依赖和 Python 依赖审计通过。Linux 容器另外实测越界符号链接不出现在目录列表，且不能注册为素材。
+自动化结果：pytest 64 项通过、1 项 Windows 符号链接权限导致跳过；Vitest 9 项通过。本地入口额外验证了配置与密钥复用，并在没有 TG 环境变量时连续两次启动成功。类型检查、生产构建、Ruff、mypy、npm 生产依赖和 Python 依赖审计通过。Linux 容器另外实测越界符号链接不出现在目录列表，且不能注册为素材。
 
 真实 Telegram 发送、独立封面最终显示、真实域名证书签发、ARM64 和更多浏览器 / 硬件编码组合仍需部署联调。
