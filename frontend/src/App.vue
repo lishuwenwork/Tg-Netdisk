@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-vue-next";
 import { useWorkspace } from "./stores/workspace";
-import { api } from "./lib/api";
+import { api, webMode } from "./lib/api";
 import { analyzeAsset, disposeWorkers } from "./media/importer";
 import type { Asset } from "./types";
 import UiButton from "./components/UiButton.vue";
@@ -29,7 +29,21 @@ import AlbumRail from "./components/AlbumRail.vue";
 import PublishInspector from "./components/PublishInspector.vue";
 import TaskList from "./components/TaskList.vue";
 import SettingsPage from "./components/SettingsPage.vue";
+import ServerFilePicker from "./components/ServerFilePicker.vue";
 const store = useWorkspace();
+const isWeb = webMode(),
+  serverPicker = ref(false);
+async function webLogout() {
+  await store.guarded(async () => {
+    await store.save(true);
+    await api("web/logout", "POST");
+    window.dispatchEvent(new Event("tg-session-expired"));
+  });
+}
+function serverSelected(assets: Asset[]) {
+  store.addAssets(assets);
+  for (const asset of assets) void analyzeAsset(asset, store);
+}
 const page = ref("editor"),
   source = ref("local"),
   urlOpen = ref(false),
@@ -73,7 +87,7 @@ async function register(paths: string[]) {
 }
 async function chooseFiles() {
   if (!window.desktop) {
-    store.error = "请从桌面客户端选择本地文件";
+    serverPicker.value = true;
     return;
   }
   await register(await window.desktop.chooseFiles());
@@ -86,6 +100,10 @@ function dragLeave(event: DragEvent) {
 }
 async function drop(event: DragEvent) {
   dragging.value = false;
+  if (isWeb) {
+    store.error = "请从服务器文件列表选择素材";
+    return;
+  }
   if (!event.dataTransfer?.files.length) return;
   const paths = window.desktop?.droppedPaths(event.dataTransfer.files) || [];
   await register(paths);
@@ -215,6 +233,9 @@ onBeforeUnmount(() => {
         </button>
       </nav>
       <div class="sidebar-bottom">
+        <button v-if="isWeb" class="nav-item" @click="webLogout">
+          <span>退出工作台</span>
+        </button>
         <button class="nav-item" @click="help = true">
           <CircleHelp :size="17" :stroke-width="1.5" /><span>帮助</span></button
         ><button
@@ -240,7 +261,13 @@ onBeforeUnmount(() => {
         <div class="version-row">
           <span>v0.1.5</span
           ><span class="connection-status" :class="{ connected: store.online }"
-            ><i />{{ store.online ? "本地服务已连接" : "未连接" }}</span
+            ><i />{{
+              store.online
+                ? isWeb
+                  ? "服务已连接"
+                  : "本地服务已连接"
+                : "未连接"
+            }}</span
           >
         </div>
       </div>
@@ -280,7 +307,7 @@ onBeforeUnmount(() => {
       >
         <section
           class="workspace"
-          @dragover.prevent="dragging = true"
+          @dragover.prevent="dragging = !isWeb"
           @dragleave="dragLeave"
           @drop.prevent="drop"
         >
@@ -289,7 +316,7 @@ onBeforeUnmount(() => {
               <span class="eyebrow">NEW POST</span>
               <h1>新建发布</h1>
             </div>
-            <div class="source-switch">
+            <div v-if="!isWeb" class="source-switch">
               <button
                 :class="{ active: source === 'local' }"
                 @click="source = 'local'"
@@ -315,7 +342,9 @@ onBeforeUnmount(() => {
             <UiButton
               class="add-media-button"
               :disabled="!store.online"
-              @click="source === 'url' ? (urlOpen = true) : chooseFiles()"
+              @click="
+                !isWeb && source === 'url' ? (urlOpen = true) : chooseFiles()
+              "
               ><Plus :size="15" />添加素材</UiButton
             >
           </div>
@@ -364,6 +393,11 @@ onBeforeUnmount(() => {
       />
       <SettingsPage v-else :key="page" :account="page === 'account'" />
     </main>
+    <ServerFilePicker
+      :open="serverPicker"
+      @close="serverPicker = false"
+      @selected="serverSelected"
+    />
     <Transition name="toast"
       ><div v-if="store.error" class="toast toast-error" role="alert">
         <span>{{ store.error }}</span

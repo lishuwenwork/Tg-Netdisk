@@ -19,6 +19,7 @@
     "test:reset": "node scripts/check-reset.mjs",
     "test:tasks": "node scripts/check-task-history.mjs",
     "test:upload-settings": "node scripts/check-upload-settings.mjs",
+    "test:web": "node scripts/check-web.mjs",
     "start": "electron .",
     "pack:backend": "powershell -ExecutionPolicy Bypass -File scripts/package-backend.ps1",
     "pack": "npm run build && npm run pack:backend && electron-builder --win nsis",

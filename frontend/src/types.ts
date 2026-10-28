@@ -16,7 +16,7 @@ export interface Asset {
   name: string;
   path?: string;
   kind: "video" | "image";
-  origin: "local" | "download" | "frame" | "thumbnail";
+  origin: "local" | "server" | "download" | "frame" | "thumbnail";
   status: "downloading" | "ready" | "failed" | "cancelled";
   size: number;
   metadata: Partial<Metadata>;

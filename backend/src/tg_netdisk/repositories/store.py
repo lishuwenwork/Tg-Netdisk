@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import builtins
 import copy
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -39,7 +40,12 @@ class Store:
         cfg = Config()
         import sys
 
-        migration_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3])) / "migrations"
+        migration_dir = Path(
+            os.environ.get(
+                "TG_MIGRATIONS_DIR",
+                str(Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[3])) / "migrations"),
+            )
+        )
         cfg.set_main_option("script_location", str(migration_dir))
         cfg.set_main_option("sqlalchemy.url", str(self.engine.url).replace("%", "%%"))
         await asyncio.to_thread(command.upgrade, cfg, "head")

@@ -14,6 +14,8 @@ __pycache__/
 *.session*
 *.db*
 .env
+.secrets/
+deploy/data/
 .runtime/
 *.log
 playwright-report/

@@ -9,13 +9,14 @@ import {
   Wifi,
 } from "lucide-vue-next";
 import { useWorkspace } from "../stores/workspace";
-import { api } from "../lib/api";
+import { api, webMode } from "../lib/api";
 import { bytes } from "../lib/format";
 import type { Auth } from "../types";
 import UiButton from "./UiButton.vue";
 import UiModal from "./UiModal.vue";
 const props = defineProps<{ account: boolean }>();
 const store = useWorkspace();
+const isWeb = webMode();
 interface UploadDiagnostics {
   crypto_backend: string;
   native_crypto: boolean;
@@ -359,7 +360,7 @@ if (props.account) void store.guarded(loadProxies);
               <option value="dark">深色</option>
               <option value="light">浅色</option>
             </select></label
-          ><label class="field-label"
+          ><label v-if="!isWeb" class="field-label"
             >关闭窗口<select
               v-model="form.close_behavior"
               class="field"
@@ -399,7 +400,7 @@ if (props.account) void store.guarded(loadProxies);
               class="text-xs text-muted leading-5"
               >范围 1～10，默认 4；保存后从下一个文件上传开始生效。</span
             ></label
-          ><label class="field-label"
+          ><label v-if="!isWeb" class="field-label"
             >下载目录
             <div class="flex gap-2">
               <input
@@ -437,7 +438,7 @@ if (props.account) void store.guarded(loadProxies);
           <span class="text-muted text-xs break-all">{{
             store.settings.data_dir || "—"
           }}</span
-          ><UiButton @click="openLogs"
+          ><UiButton v-if="!isWeb" @click="openLogs"
             ><FolderOpen :size="14" />打开日志</UiButton
           >
         </div>

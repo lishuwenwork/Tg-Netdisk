@@ -85,6 +85,18 @@ class MediaService:
         return await self.store.save("media", data)
 
     async def verify(self, asset: dict):
+        if self.config.mode == "web":
+            path = Path(asset["path"]).resolve()
+            if asset.get("origin") == "server":
+                allowed = path.is_relative_to(self.config.media_root.resolve())
+            elif asset.get("origin") in ("frame", "thumbnail"):
+                allowed = path.is_relative_to(
+                    (self.config.data_dir / "media/frames").resolve()
+                ) or path.is_relative_to((self.config.data_dir / "cache/thumbnails").resolve())
+            else:
+                allowed = False
+            if not allowed:
+                raise AppError("MEDIA_PATH_DENIED", "素材不在允许的服务器媒体目录中")
         fp = await asyncio.to_thread(fingerprint, Path(asset["path"]))
         if any(fp[k] != asset[k] for k in ("size", "mtime_ns")):
             raise AppError("FILE_CHANGED", f"文件已修改，请重新添加：{asset['name']}")
@@ -256,7 +268,7 @@ class MediaService:
             assets = await self.store.list("media")
             registered_paths = {str(Path(a["path"]).resolve()).casefold() for a in assets if a.get("path")}
             for asset in assets:
-                if asset.get("origin") == "local" or asset["status"] == "downloading":
+                if asset.get("origin") in ("local", "server") or asset["status"] == "downloading":
                     continue
                 path = Path(asset.get("path", ""))
                 if not path.is_file():

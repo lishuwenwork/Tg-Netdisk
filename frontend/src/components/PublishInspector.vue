@@ -2,12 +2,26 @@
 import { computed, ref } from "vue";
 import { ArrowUpRight, Check, Hash, ImagePlus, Send, X } from "lucide-vue-next";
 import { useWorkspace } from "../stores/workspace";
-import { api, mediaUrl } from "../lib/api";
+import { api, mediaUrl, webMode } from "../lib/api";
 import { caption } from "../lib/format";
 import type { Asset, Channel } from "../types";
 import UiButton from "./UiButton.vue";
 import UiModal from "./UiModal.vue";
+import ServerFilePicker from "./ServerFilePicker.vue";
 const store = useWorkspace();
+const serverCover = ref(false),
+  coverTargetId = ref("");
+function serverCoverSelected(assets: Asset[]) {
+  const cover = assets[0];
+  const target = store.draft.items.find(
+    (item) => item.media_id === coverTargetId.value,
+  );
+  if (cover?.kind === "image" && target) {
+    store.assets[cover.id] = cover;
+    target.cover_id = cover.id;
+    store.autosave();
+  }
+}
 const tagInput = ref(""),
   manualChannel = ref(false),
   busy = ref(false),
@@ -74,6 +88,11 @@ async function resolveChannel() {
   }, revision);
 }
 async function chooseCover() {
+  if (webMode()) {
+    coverTargetId.value = selectedItem.value?.media_id || "";
+    serverCover.value = true;
+    return;
+  }
   const revision = store.draftRevision;
   const targetId = selectedItem.value?.media_id;
   await store.guarded(async () => {
@@ -106,6 +125,13 @@ async function enqueue() {
 </script>
 <template>
   <aside class="inspector">
+    <ServerFilePicker
+      :open="serverCover"
+      images-only
+      single
+      @close="serverCover = false"
+      @selected="serverCoverSelected"
+    />
     <div class="inspector-heading">
       <h2>发布设置</h2>
       <span class="eyebrow">{{

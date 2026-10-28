@@ -5,15 +5,17 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from tg_netdisk import __version__
 from tg_netdisk.core.config import AppError, Config
 from tg_netdisk.core.diagnostics import crypto_report
-from tg_netdisk.core.secrets import SecretStore
+from tg_netdisk.core.secrets import EncryptedSecretStore, SecretStore
+from tg_netdisk.core.web_security import COOKIE_NAME, SESSION_LIFETIME, WebAccess
 from tg_netdisk.integrations.telegram import TelegramGateway
 from tg_netdisk.models.schemas import (
     ConfirmResult,
@@ -29,6 +31,7 @@ from tg_netdisk.models.schemas import (
 from tg_netdisk.repositories.store import Store
 from tg_netdisk.services.events import EventBus
 from tg_netdisk.services.media import MediaService
+from tg_netdisk.services.server_files import ServerFiles
 from tg_netdisk.services.tasks import ACTIVE, TaskQueue
 
 
@@ -38,7 +41,13 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
     logging.getLogger("tg_netdisk").info("runtime version=%s upload=%s", __version__, crypto_report())
     store = Store(config.data_dir / "app.db")
     events = EventBus()
-    secrets = secrets or SecretStore("Tg Netdisk " + str(config.data_dir))
+    secrets = secrets or (
+        EncryptedSecretStore(config.data_dir / "credentials.enc", config.secret_key_file)
+        if config.mode == "web"
+        else SecretStore("Tg Netdisk " + str(config.data_dir))
+    )
+    web_access = WebAccess(config) if config.mode == "web" else None
+    server_files = ServerFiles(config.media_root)
     gateway = gateway_factory(config, store, events, secrets)
     media = MediaService(config, store, events, secrets)
     queue = TaskQueue(store, media, gateway, events)
@@ -70,10 +79,10 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
     )
     app.state.store, app.state.queue, app.state.media = store, queue, media
     app.state.gateway, app.state.config = gateway, config
-    app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "testserver"])
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=config.allowed_hosts)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=list(config.origins),
+        allow_origins=list(config.allowed_origins),
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type", "Range"],
         expose_headers=["Content-Range", "Accept-Ranges", "Content-Length"],
@@ -82,19 +91,40 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
     @app.middleware("http")
     async def guard(request: Request, call_next):
         origin = request.headers.get("origin")
-        if origin and origin not in config.origins:
+        if origin and origin not in config.allowed_origins:
             return JSONResponse({"code": "ORIGIN_DENIED", "message": "来源未授权", "retryable": False}, 403)
-        if request.method != "OPTIONS":
+        if web_access:
+            if request.method not in ("GET", "HEAD", "OPTIONS") and origin != config.public_origin:
+                return JSONResponse(
+                    {"code": "ORIGIN_DENIED", "message": "请求来源无效，请刷新页面", "retryable": False}, 403
+                )
+            public = {"/api/health", "/api/web/session", "/api/web/login"}
+            if (
+                request.url.path.startswith("/api/")
+                and request.url.path not in public
+                and not web_access.valid(request.cookies.get(COOKIE_NAME, ""))
+            ):
+                return JSONResponse(
+                    {"code": "UNAUTHORIZED", "message": "请登录 Web 工作台", "retryable": False}, 401
+                )
+        elif request.method != "OPTIONS":
             token = request.headers.get("authorization", "").removeprefix("Bearer ")
             # Native media elements cannot add Authorization; access logs are disabled.
             if request.url.path.startswith("/api/media/") and request.url.path.endswith("/file"):
                 token = token or request.query_params.get("token", "")
-            if not hmac.compare_digest(token, config.token):
+            if not hmac.compare_digest(token.encode(), config.token.encode()):
                 return JSONResponse(
                     {"code": "UNAUTHORIZED", "message": "本地会话已失效", "retryable": False}, 401
                 )
         try:
-            return await call_next(request)
+            response = await call_next(request)
+            if web_access:
+                response.headers["X-Content-Type-Options"] = "nosniff"
+                response.headers["Referrer-Policy"] = "no-referrer"
+                response.headers["X-Frame-Options"] = "DENY"
+                if request.url.path.startswith("/api/"):
+                    response.headers["Cache-Control"] = "no-store"
+            return response
         except Exception:
             logging.getLogger("tg_netdisk").error("Request failed: %s %s", request.method, request.url.path)
             return JSONResponse(
@@ -114,6 +144,50 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
             "version": __version__,
             **crypto_report(concurrency=concurrency),
         }
+
+    @app.get("/api/web/session")
+    async def web_session(request: Request):
+        return {
+            "mode": config.mode,
+            "authenticated": bool(web_access and web_access.valid(request.cookies.get(COOKIE_NAME, ""))),
+        }
+
+    @app.post("/api/web/login")
+    async def web_login(request: Request, value: PasswordRequest):
+        if web_access is None:
+            raise HTTPException(404)
+        token, limited = await web_access.login(
+            value.password, request.client.host if request.client else "unknown"
+        )
+        if not token:
+            return JSONResponse(
+                {
+                    "code": "LOGIN_LIMIT" if limited else "WRONG_PASSWORD",
+                    "message": "尝试过于频繁，请稍后再试" if limited else "访问密码错误",
+                    "retryable": False,
+                },
+                429 if limited else 401,
+            )
+        response = JSONResponse({"authenticated": True})
+        response.set_cookie(
+            COOKIE_NAME,
+            token,
+            max_age=SESSION_LIFETIME,
+            httponly=True,
+            secure=web_access.secure_cookie,
+            samesite="strict",
+            path="/",
+        )
+        return response
+
+    @app.post("/api/web/logout")
+    async def web_logout(request: Request):
+        if web_access is None:
+            raise HTTPException(404)
+        web_access.logout(request.cookies.get(COOKIE_NAME, ""))
+        response = JSONResponse({"authenticated": False})
+        response.delete_cookie(COOKIE_NAME, path="/")
+        return response
 
     async def public_settings():
         data = {
@@ -157,6 +231,8 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
 
     @app.put("/api/settings")
     async def settings_put(value: ConnectionSettings):
+        if config.mode == "web" and value.download_dir:
+            raise AppError("WEB_SETTING", "Web 模式不支持修改服务器目录")
         secret_names = {"api_hash", "telegram_proxy", "download_proxy"}
         previous = {
             **ConnectionSettings().model_dump(exclude=secret_names),
@@ -256,6 +332,8 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
 
     @app.post("/api/media/register")
     async def register(value: RegisterFiles):
+        if config.mode == "web":
+            raise AppError("SERVER_FILES_ONLY", "请从服务器文件列表选择素材")
         result, failures = [], []
         async with media.lock:
             for path in value.paths:
@@ -265,6 +343,37 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
                     failures.append(
                         {
                             "name": Path(path).name,
+                            "message": exc.message if isinstance(exc, AppError) else "文件不可读",
+                        }
+                    )
+        return {"assets": result, "failures": failures}
+
+    @app.get("/api/server-files")
+    async def server_file_list(
+        path: str = Query("", max_length=4000),
+        query: str = Query("", max_length=100),
+        offset: int = Query(0, ge=0),
+        limit: int = Query(100, ge=1, le=200),
+        kind: str = Query("media", pattern="^(image|media)$"),
+    ):
+        if config.mode != "web":
+            raise HTTPException(404)
+        return await server_files.browse(path, query, offset, limit, kind)
+
+    @app.post("/api/server-files/register")
+    async def server_file_register(value: RegisterFiles):
+        if config.mode != "web":
+            raise HTTPException(404)
+        result, failures = [], []
+        async with media.lock:
+            for relative in value.paths:
+                try:
+                    path = server_files.resolve(relative)
+                    result.append(await media.register(str(path), "server"))
+                except (AppError, OSError) as exc:
+                    failures.append(
+                        {
+                            "name": Path(relative).name,
                             "message": exc.message if isinstance(exc, AppError) else "文件不可读",
                         }
                     )
@@ -283,6 +392,8 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
 
     @app.post("/api/downloads")
     async def download(value: DownloadRequest):
+        if config.mode == "web":
+            raise AppError("SERVER_FILES_ONLY", "Web 模式仅使用服务器文件")
         return await media.start_download(value)
 
     @app.post("/api/downloads/{asset_id}/cancel")
@@ -353,9 +464,12 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
 
     @app.websocket("/api/events")
     async def websocket(ws: WebSocket):
-        if ws.headers.get("origin") not in config.origins or not hmac.compare_digest(
-            ws.query_params.get("token", ""), config.token
-        ):
+        authorized = (
+            web_access.valid(ws.cookies.get(COOKIE_NAME, ""))
+            if web_access
+            else hmac.compare_digest(ws.query_params.get("token", "").encode(), config.token.encode())
+        )
+        if ws.headers.get("origin") not in config.allowed_origins or not authorized:
             await ws.close(code=4403)
             return
         await ws.accept()
@@ -367,8 +481,13 @@ def create_app(config: Config | None = None, gateway_factory=TelegramGateway, se
                         value = await asyncio.wait_for(channel.get(), timeout=20)
                     except asyncio.TimeoutError:
                         value = {"type": "heartbeat", "id": "", "data": {}}
+                    if web_access and not web_access.valid(ws.cookies.get(COOKIE_NAME, "")):
+                        await ws.close(code=4401)
+                        return
                     await ws.send_json(value)
         except (WebSocketDisconnect, RuntimeError):
             pass
 
+    if config.mode == "web" and config.frontend_dir:
+        app.mount("/", StaticFiles(directory=str(config.frontend_dir), html=True), name="frontend")
     return app

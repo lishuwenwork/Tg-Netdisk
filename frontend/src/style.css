@@ -1,4 +1,89 @@
 @import "tailwindcss";
+.web-login {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--text);
+  padding: 24px;
+}
+.web-login-card {
+  width: min(360px, 100%);
+  padding: 32px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: 0 12px 60px #0003;
+}
+.web-login-card .brand {
+  padding: 0;
+  margin-bottom: 32px;
+}
+.file-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: auto;
+  margin-bottom: 16px;
+  white-space: nowrap;
+}
+.file-search {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.server-file-list {
+  min-height: 220px;
+  max-height: 45vh;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.server-file-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  text-align: left;
+}
+.server-file-row:hover {
+  background: var(--hover);
+}
+.server-file-row.chosen {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.file-check {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 12px;
+}
+.file-empty {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+}
 @source "./**/*.{vue,ts}";
 @theme inline {
   --color-accent: var(--accent);

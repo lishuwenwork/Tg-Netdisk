@@ -94,6 +94,7 @@ export const useWorkspace = defineStore("workspace", () => {
     settings.value = snapshot.settings;
   }
   async function boot() {
+    loading.value = true;
     await guarded(async () => {
       await initialize();
       stopFlush = window.desktop?.onFlushDraft(async () => {
